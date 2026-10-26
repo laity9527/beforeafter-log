@@ -251,10 +251,14 @@ async function callLlm(
 	return { content, model };
 }
 
-export const onRequestPost: PagesFunction<AnalyzeEnv> = async (context) => {
+async function handleAnalyze(context: Parameters<PagesFunction<AnalyzeEnv>>[0]): Promise<Response> {
 	const env = context.env;
 	const missing = ['ADMIN_PASSWORD', 'GITHUB_TOKEN', 'OPENAI_API_KEY'].filter((name) => !env[name as keyof AnalyzeEnv]);
-	if (!env.ANALYZE_LIMITS) missing.push('ANALYZE_LIMITS');
+	// 只判「有没有值」不够：把 ANALYZE_LIMITS 加成文本变量也会通过，然后在下一次 .get() 处抛未捕获异常
+	const kv = env.ANALYZE_LIMITS;
+	if (!kv || typeof kv.get !== 'function' || typeof kv.put !== 'function') {
+		missing.push('ANALYZE_LIMITS（必须是 KV namespace 绑定，不是变量或 Secret）');
+	}
 	if (missing.length > 0) {
 		return json(500, { ok: false, error: '服务端缺少配置，分析功能不可用', detail: `未设置：${missing.join('、')}` });
 	}
@@ -366,5 +370,17 @@ export const onRequestPost: PagesFunction<AnalyzeEnv> = async (context) => {
 			return json(e.status, { ok: false, error: '模型调用失败', detail: e.detail });
 		}
 		return json(500, { ok: false, error: '分析流程异常', detail: String(error) });
+	}
+}
+
+// 任何逃出内层 try 的异常都会让 Cloudflare 替我们回一个 HTML 502，前端只能看到光秃秃的状态码；
+// 这层兜底保证「永远是我们回答」，并把堆栈打进 Pages 的 Functions 日志
+export const onRequestPost: PagesFunction<AnalyzeEnv> = async (context) => {
+	try {
+		return await handleAnalyze(context);
+	} catch (error) {
+		const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+		console.error('/api/analyze 未捕获异常', detail, error instanceof Error ? error.stack : '');
+		return json(500, { ok: false, error: '分析流程出现未预期异常', detail: detail.slice(0, 200) });
 	}
 };
