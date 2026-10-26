@@ -1,18 +1,36 @@
 ---
 import type { CollectionEntry } from 'astro:content';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { getCollection } from 'astro:content';
-import { formatDate } from '../../utils/format-date';
+import { formatDate, formatDateTime } from '../../utils/format-date';
+import { blobUrl, commitUrl, commitsUrl, verifyCommand } from '../../utils/github';
+import { hashFile, verifyLedger } from '../../utils/seal';
 
 export async function getStaticPaths() {
-	const logs = await getCollection('log');
+	const [logs, ledgers] = await Promise.all([getCollection('log'), getCollection('seal')]);
 	return logs.map((log) => ({
 		params: { slug: log.id },
-		props: { log },
+		props: {
+			log,
+			// 封存账本按文件名（entry.id）配对，CLI 写进去的 slug 就是文件名
+			ledger: ledgers.find((entry) => entry.data.slug === log.id)?.data,
+		},
 	}));
 }
 
-type Props = { log: CollectionEntry<'log'> };
-const { log }: Props = Astro.props;
+type SealLedgerData = CollectionEntry<'seal'>['data'];
+type Props = { log: CollectionEntry<'log'>; ledger?: SealLedgerData };
+const { log, ledger }: Props = Astro.props;
+
+const mdPath = resolve(log.filePath!);
+const rawText = readFileSync(mdPath, 'utf8');
+
+// 门禁：正文与封存账本不一致就让构建红，绝不静默渲染被改过的内容
+const problems = ledger ? verifyLedger(ledger, rawText) : [];
+if (problems.length > 0) {
+	throw new Error(`存证校验失败 ${log.id}\n    ${problems.join('\n    ')}`);
+}
 
 // Markdown 正文渲染结果不是 scoped 元素，插入的分隔线样式写在 is:global 块里
 const bodyHtml = log.rendered!.html.replace(
@@ -20,7 +38,10 @@ const bodyHtml = log.rendered!.html.replace(
 	'<hr class="log-rule">$&'
 );
 
-const commitsUrl = `https://github.com/laity9527/beforeafter-log/commits/main/src/content/logs/${log.id}.md`;
+const seals = ledger?.seals ?? [];
+const currentFileHash = hashFile(rawText);
+// 溯源 URL 指向的是文件名（entry.id），不是 work_slug
+const fileSlug = log.id;
 ---
 
 <!DOCTYPE html>
@@ -65,6 +86,31 @@ const commitsUrl = `https://github.com/laity9527/beforeafter-log/commits/main/sr
 			.timestamps .after { color: #a3a3a3; }
 			.timestamps .arrow { color: #525252; }
 
+			/* 存证面板 */
+			.proof { margin-top: 4rem; border: 1px solid #262626; border-radius: 0.5rem; background-color: #0a0a0a; padding: 1.25rem; }
+			.proof-head {
+				display: flex; align-items: center; gap: 0.5rem;
+				font-family: monospace; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+				color: #525252; margin-bottom: 1rem;
+			}
+			.proof-head .dot { width: 7px; height: 7px; border-radius: 50%; background-color: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); }
+			.proof-head .dot.draft { background-color: #fbbf24; box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
+			.proof-row { padding: 0.9rem 0; border-top: 1px solid #1a1a1a; }
+			.proof-row:first-of-type { border-top: none; padding-top: 0; }
+			.proof-stage { font-family: monospace; font-size: 0.75rem; color: #fbbf24; letter-spacing: 0.08em; margin-bottom: 0.35rem; }
+			.proof-kv { font-family: monospace; font-size: 0.72rem; color: #737373; line-height: 1.9; }
+			.proof-kv b { color: #a3a3a3; font-weight: 400; }
+			.proof-kv code { color: #d4d4d4; word-break: break-all; }
+			.proof-kv a { color: #10b981; text-decoration: none; }
+			.proof-kv a:hover { color: #fbbf24; }
+			.proof-file { margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #262626; }
+			.proof-cmd {
+				display: block; margin-top: 0.5rem; padding: 0.6rem 0.75rem;
+				background-color: #121212; border: 1px solid #262626; border-radius: 0.35rem;
+				font-family: monospace; font-size: 0.68rem; color: #a3a3a3; word-break: break-all;
+			}
+			.proof-limit { margin-top: 1rem; font-size: 0.72rem; color: #525252; line-height: 1.6; }
+
 			.commit-link {
 				display: inline-flex; align-items: center; gap: 0.5rem;
 				font-family: monospace; font-size: 0.8rem; color: #e5e5e5; text-decoration: none;
@@ -93,7 +139,7 @@ const commitsUrl = `https://github.com/laity9527/beforeafter-log/commits/main/sr
 		<div class="container">
 			<nav>
 				<a href="/">← 返回判断轨迹</a>
-				<a href={commitsUrl} target="_blank" rel="noopener noreferrer">Git 存证 ↗</a>
+				<a href={commitsUrl(fileSlug)} target="_blank" rel="noopener noreferrer">Git 存证 ↗</a>
 			</nav>
 
 			<header>
@@ -110,8 +156,48 @@ const commitsUrl = `https://github.com/laity9527/beforeafter-log/commits/main/sr
 
 			<article class="log-prose" set:html={bodyHtml} />
 
+			<section class="proof">
+				<div class="proof-head">
+					<span class:list={['dot', { draft: seals.length === 0 }]}></span>
+					{seals.length === 0 ? '未封存' : `已封存 ${seals.length} 次`}
+				</div>
+
+				{seals.length === 0 ? (
+					<p class="proof-limit">
+						这条日志还没有任何封存锚点，正文可以随意改动而不被构建发现。写完 BEFORE 后运行
+						<code>npm run seal -- {fileSlug} before</code> 封存一次。
+					</p>
+				) : (
+					<>
+						{seals.map((seal) => (
+							<div class="proof-row">
+								<div class="proof-stage">{seal.stage.toUpperCase()} 段封存</div>
+								<div class="proof-kv">
+									<b>段落 SHA-256</b><br />
+									<code>{seal.section_sha256}</code><br />
+									<b>封存时间</b> {formatDateTime(new Date(seal.sealed_at))}<br />
+									<b>锚定提交</b>
+									<a href={commitUrl(seal.commit)} target="_blank" rel="noopener noreferrer">{seal.commit.slice(0, 7)}</a>
+									{' · '}
+									<a href={blobUrl(seal.commit, fileSlug)} target="_blank" rel="noopener noreferrer">在 GitHub 看当时的原文 ↗</a>
+								</div>
+							</div>
+						))}
+						<div class="proof-file proof-kv">
+							<b>整份文件 SHA-256（按 LF 换行）</b><br />
+							<code>{currentFileHash}</code>
+							<span class="proof-cmd">{verifyCommand(fileSlug)}</span>
+							<p class="proof-limit">
+								构建时如果正文与上面任一段落指纹不一致会直接失败，所以这一页渲染出来就等于机器已经比对过。
+								但它证明不了本机「改了内容再重新封存一次」——那种情况只能靠左侧提交历史里那次 diff。
+							</p>
+						</div>
+					</>
+				)}
+			</section>
+
 			<footer>
-				<a class="commit-link" href={commitsUrl} target="_blank" rel="noopener noreferrer">
+				<a class="commit-link" href={commitsUrl(fileSlug)} target="_blank" rel="noopener noreferrer">
 					在 GitHub 查看本文的提交历史 ↗
 				</a>
 				<p class="legal">Laity Studio © 2026. All judgments are timestamped.</p>

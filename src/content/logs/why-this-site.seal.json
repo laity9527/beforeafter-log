@@ -1,0 +1,12 @@
+{
+  "slug": "why-this-site",
+  "seals": [
+    {
+      "stage": "before",
+      "section_sha256": "e5e3a2699d514db75eb11a760dc34c1de1d335a1b87e25160aa74b4c3b356a0f",
+      "file_sha256": "664b1cc4e6049f1bef6e0a4707ac27df5ce05b1e7da2790c35d5ed2a40d9202d",
+      "commit": "a4ddaa4ee2b6354a199e938cb44a8f8d4e3cadc1",
+      "sealed_at": "2026-10-26T06:51:33.575Z"
+    }
+  ]
+}

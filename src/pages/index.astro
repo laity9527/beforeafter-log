@@ -5,6 +5,11 @@ import { formatDate } from '../utils/format-date';
 const logs = (await getCollection('log')).sort(
 	(a, b) => b.data.before_written_at.getTime() - a.data.before_written_at.getTime()
 );
+
+const ledgers = await getCollection('seal');
+const sealedCount = logs.filter((log) =>
+	ledgers.some((ledger) => ledger.data.slug === log.id && ledger.data.seals.length > 0)
+).length;
 ---
 
 <!DOCTYPE html>
@@ -46,6 +51,10 @@ const logs = (await getCollection('log')).sort(
 				font-family: monospace;
 			}
 			.trust-badge svg { width: 14px; height: 14px; }
+			.trust-badge.pending {
+				color: #fbbf24; background-color: rgba(251, 191, 36, 0.08);
+				border-color: rgba(251, 191, 36, 0.2);
+			}
 
 			/* 区块标题 */
 			.section-title {
@@ -127,9 +136,9 @@ const logs = (await getCollection('log')).sort(
 			<header>
 				<h1>前后志</h1>
 				<p class="subtitle">不囤想法，直接上线。<br>每个作品，都有做之前和做之后。</p>
-				<span class="trust-badge">
+				<span class:list={['trust-badge', { pending: sealedCount < logs.length }]}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
-					Git commit 验证已开启
+					Git 存证 {sealedCount}/{logs.length} 条已封存
 				</span>
 			</header>
 
