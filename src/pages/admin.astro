@@ -54,6 +54,23 @@
 			.status[data-kind='pending'] { color: #a3a3a3; }
 			.status[data-kind='ok'] { color: #10b981; }
 			.status[data-kind='error'] { color: #f87171; }
+
+			/* AI 解析区：故意放在 form 外面，否则 form.reset() 会连 Commit Hash 一起清掉，
+			   而且它的 pattern 会参与整表校验，哈希没填对时连发布都会被拦住 */
+			.ai {
+				border: 1px dashed #262626; border-radius: 0.5rem; padding: 1.25rem;
+				margin-bottom: 2.5rem; background-color: #0a0a0a;
+			}
+			.spinner {
+				display: none; width: 12px; height: 12px; margin-right: 0.5rem;
+				border: 2px solid #262626; border-top-color: #fbbf24; border-radius: 50%;
+				vertical-align: -1px;
+			}
+			#analyze-btn[data-busy='true'] .spinner { display: inline-block; animation: spin 0.8s linear infinite; }
+			@keyframes spin { to { transform: rotate(360deg); } }
+			@media (prefers-reduced-motion: reduce) {
+				#analyze-btn[data-busy='true'] .spinner { animation: none; border-top-color: #a3a3a3; }
+			}
 		</style>
 	</head>
 	<body>
@@ -65,6 +82,18 @@
 
 			<h1>发布后台</h1>
 			<p class="hint">写一条判断记录：BEFORE 先上线，AFTER 留空等验证之后再补。密码只发给服务端校验，本页不做任何判断。</p>
+
+			<div class="ai">
+				<label>
+					Commit Hash
+					<input type="text" id="commit-hash" placeholder="a4ddaa4 或 7-40 位完整 sha" autocomplete="off" spellcheck="false" />
+					<span>只分析这一个仓库的提交：laity9527/beforeafter-log（服务端锁死，传别的 repo 会被拒）</span>
+				</label>
+				<button type="button" id="analyze-btn">
+					<span class="spinner" aria-hidden="true"></span>AI 解析代码变更
+				</button>
+				<p class="status" id="analyze-status" role="status" aria-live="polite"></p>
+			</div>
 
 			<form id="publish-form">
 				<label>
@@ -108,11 +137,23 @@
 			const form = document.getElementById('publish-form');
 			const submitBtn = document.getElementById('submit-btn');
 			const statusEl = document.getElementById('status');
+			const analyzeBtn = document.getElementById('analyze-btn');
+			const analyzeStatusEl = document.getElementById('analyze-status');
+			const hashInput = document.getElementById('commit-hash');
 
-			const setStatus = (text, kind) => {
-				statusEl.textContent = text;
-				statusEl.dataset.kind = kind;
+			const writeStatus = (target, text, kind) => {
+				target.textContent = text;
+				target.dataset.kind = kind;
 			};
+			const setStatus = (text, kind) => writeStatus(statusEl, text, kind);
+			const setAnalyzeStatus = (text, kind) => writeStatus(analyzeStatusEl, text, kind);
+
+			// 后端把 AI 产的 BEFORE 一律换成这句占位；这里只当第二道锁，主锁是 beforeUntouched 标志
+			const AI_PLACEHOLDER = '（此段由本人在动手之前手写：当时怎么判断、明确不做什么。AI 不代写预判。）';
+			let beforeUntouched = false;
+			form.elements.before.addEventListener('input', () => {
+				beforeUntouched = false;
+			});
 
 			const buildPayload = (data) => ({
 				password: String(data.get('password') ?? ''),
@@ -147,6 +188,11 @@
 				event.preventDefault();
 				const payload = buildPayload(new FormData(form));
 
+				if (beforeUntouched || payload.before === AI_PLACEHOLDER) {
+					setStatus('BEFORE 还是 AI 占位，这句不能当判断发布——本人写完后重试', 'error');
+					return;
+				}
+
 				const idleLabel = submitBtn.textContent;
 				submitBtn.disabled = true;
 				submitBtn.setAttribute('aria-busy', 'true');
@@ -162,6 +208,7 @@
 
 					if (response.ok) {
 						form.reset();
+						beforeUntouched = false;
 						setStatus('发布成功，等待构建', 'ok');
 					} else {
 						setStatus(`发布失败：${await describeFailure(response)}`, 'error');
@@ -172,6 +219,87 @@
 					submitBtn.disabled = false;
 					submitBtn.removeAttribute('aria-busy');
 					submitBtn.textContent = idleLabel;
+				}
+			});
+
+			const sectionBody = (lines, headRe) => {
+				const start = lines.findIndex((line) => headRe.test(line));
+				if (start < 0) return null;
+				let end = lines.length;
+				for (let i = start + 1; i < lines.length; i++) {
+					if (/^##\s/.test(lines[i])) {
+						end = i;
+						break;
+					}
+				}
+				return lines.slice(start + 1, end).join('\n').trim();
+			};
+
+			// 草稿要拆成段内正文再填框：整段带 `## ` 回填会被 publish 的二级标题校验判 400
+			const splitDraft = (markdown) => {
+				const lines = markdown.split('\n');
+				const before = sectionBody(lines, /^##\s+before\b/i);
+				const after = sectionBody(lines, /^##\s+after\b/i);
+				if (before === null || after === null) return null;
+				return { before, after };
+			};
+
+			analyzeBtn.addEventListener('click', async () => {
+				const hash = hashInput.value.trim();
+				if (!hash) {
+					setAnalyzeStatus('先填 Commit Hash', 'error');
+					return;
+				}
+				if (!/^[0-9a-fA-F]{7,40}$/.test(hash)) {
+					setAnalyzeStatus('Commit Hash 只允许 7-40 位十六进制字符', 'error');
+					return;
+				}
+				if (!form.elements.password.value) {
+					setAnalyzeStatus('先填 Admin Password：分析接口同样要鉴权，空密码只会白扣一次配额', 'error');
+					return;
+				}
+
+				analyzeBtn.disabled = true;
+				analyzeBtn.setAttribute('aria-busy', 'true');
+				analyzeBtn.dataset.busy = 'true';
+				setAnalyzeStatus('解析中…（读 commit 并等模型返回，最长 45 秒）', 'pending');
+
+				try {
+					const response = await fetch('/api/analyze', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ password: form.elements.password.value, commit_hash: hash }),
+					});
+
+					if (!response.ok) {
+						setAnalyzeStatus(`解析失败：${await describeFailure(response)}`, 'error');
+						return;
+					}
+
+					const data = (await response.json())?.data;
+					const draft = data?.draft_markdown;
+					if (typeof draft !== 'string' || !draft) {
+						setAnalyzeStatus('解析失败：返回里没有 draft_markdown', 'error');
+						return;
+					}
+
+					const parsed = splitDraft(draft);
+					if (!parsed) {
+						setAnalyzeStatus('草稿结构不符合预期，未自动填入，可手动粘贴', 'error');
+						return;
+					}
+
+					form.elements.before.value = parsed.before;
+					form.elements.after.value = parsed.after;
+					beforeUntouched = true;
+					const quota = data.ai ? `（今日配额 ${data.ai.quota_used_today}/${data.ai.quota_limit}）` : '';
+					setAnalyzeStatus(`草稿已填入：AFTER 由 AI 生成；BEFORE 是占位，必须你本人改写后才能发布${quota}`, 'ok');
+				} catch (error) {
+					setAnalyzeStatus(`解析失败：请求没有发出去（${error.message}）`, 'error');
+				} finally {
+					analyzeBtn.disabled = false;
+					analyzeBtn.removeAttribute('aria-busy');
+					delete analyzeBtn.dataset.busy;
 				}
 			});
 		</script>
