@@ -9,6 +9,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "seal": "node scripts/seal.mjs",
+    "verify": "node scripts/verify-api-result.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

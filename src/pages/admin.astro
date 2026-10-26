@@ -134,6 +134,8 @@
 		</div>
 
 		<script>
+			import { isSuccessfulResponse, readApiResponse } from '../utils/api-result';
+
 			const form = document.getElementById('publish-form');
 			const submitBtn = document.getElementById('submit-btn');
 			const statusEl = document.getElementById('status');
@@ -167,23 +169,20 @@
 				after: String(data.get('after') ?? '').trim() || null,
 			});
 
-			const describeFailure = async (response) => {
+			const describeFailure = (response, payload, note) => {
 				const details = [];
-				let serverError = null;
-				try {
-					const data = await response.json();
-					if (typeof data?.error === 'string') serverError = data.error;
-					if (typeof data?.detail === 'string' && data.detail) details.push(data.detail);
-				} catch {
-					// 网关或静态托管回的不一定是 JSON，落到下面的状态码文案
-				}
-				if (serverError) return details.length > 0 ? `${serverError} · ${details.join(' · ')}` : serverError;
-				if (response.status === 404 || response.status === 405) {
-					return `接口未部署或路径不通（${response.status}），内容未写入仓库`;
-				}
-				// 平台级错误（Worker 崩了）回的不是我们的 JSON，把 cf-ray 带出来才能去 Pages 日志里查
+				if (typeof payload?.detail === 'string' && payload.detail) details.push(payload.detail);
+				const serverError = typeof payload?.error === 'string' ? payload.error : null;
+				const tail = note ? `，${note}` : '';
 				const cfRay = response.headers.get('cf-ray');
-				return `${response.status}${response.statusText ? ` ${response.statusText}` : ''}${cfRay ? ` · 非接口响应，CF-Ray ${cfRay}` : ''}`;
+				const trace = cfRay ? ` · CF-Ray ${cfRay}` : '';
+				if (serverError) return details.length > 0 ? `${serverError} · ${details.join(' · ')}` : serverError;
+				// 拿不到 JSON = 请求没进到我们的 Function，多半被静态托管兜底成了 200 的首页壳
+				if (!payload) return `接口没有接管这个请求（HTTP ${response.status} 回的不是 JSON）${tail}${trace}`;
+				if (response.status === 404 || response.status === 405) {
+					return `接口未部署或路径不通（${response.status}）${tail}${trace}`;
+				}
+				return `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${tail}${trace}`;
 			};
 
 			form.addEventListener('submit', async (event) => {
@@ -208,12 +207,13 @@
 						body: JSON.stringify(payload),
 					});
 
-					if (response.ok) {
+					const { payload } = await readApiResponse(response);
+					if (isSuccessfulResponse(response, payload)) {
 						form.reset();
 						beforeUntouched = false;
 						setStatus('发布成功，等待构建', 'ok');
 					} else {
-						setStatus(`发布失败：${await describeFailure(response)}`, 'error');
+						setStatus(`发布失败：${describeFailure(response, payload, '内容未写入仓库')}`, 'error');
 					}
 				} catch (error) {
 					setStatus(`发布失败：请求没有发出去（${error.message}）`, 'error');
@@ -273,12 +273,13 @@
 						body: JSON.stringify({ password: form.elements.password.value, commit_hash: hash }),
 					});
 
-					if (!response.ok) {
-						setAnalyzeStatus(`解析失败：${await describeFailure(response)}`, 'error');
+					const { payload } = await readApiResponse(response);
+					if (!isSuccessfulResponse(response, payload)) {
+						setAnalyzeStatus(`解析失败：${describeFailure(response, payload)}`, 'error');
 						return;
 					}
 
-					const data = (await response.json())?.data;
+					const data = payload?.data;
 					const draft = data?.draft_markdown;
 					if (typeof draft !== 'string' || !draft) {
 						setAnalyzeStatus('解析失败：返回里没有 draft_markdown', 'error');
