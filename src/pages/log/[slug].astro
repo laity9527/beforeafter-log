@@ -1,0 +1,121 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
+import { formatDate } from '../../utils/format-date';
+
+export async function getStaticPaths() {
+	const logs = await getCollection('log');
+	return logs.map((log) => ({
+		params: { slug: log.id },
+		props: { log },
+	}));
+}
+
+type Props = { log: CollectionEntry<'log'> };
+const { log }: Props = Astro.props;
+
+// Markdown 正文渲染结果不是 scoped 元素，插入的分隔线样式写在 is:global 块里
+const bodyHtml = log.rendered!.html.replace(
+	/<h2\b[^>]*>(?:\s*<[^>]+>)*\s*AFTER\b/i,
+	'<hr class="log-rule">$&'
+);
+
+const commitsUrl = `https://github.com/laity9527/beforeafter-log/commits/main/src/content/logs/${log.id}.md`;
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{log.data.title} | 前后志</title>
+		<style>
+			* { box-sizing: border-box; margin: 0; padding: 0; }
+			body {
+				background-color: #050505;
+				color: #e5e5e5;
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+				line-height: 1.6;
+				padding: 0 1.5rem;
+			}
+			.container { max-width: 68ch; margin: 0 auto; padding: 5rem 0; }
+
+			nav {
+				display: flex; justify-content: space-between; align-items: center;
+				font-size: 0.85rem; margin-bottom: 4rem; font-family: monospace;
+			}
+			nav a { color: #737373; text-decoration: none; transition: color 0.2s; }
+			nav a:hover { color: #fbbf24; }
+
+			h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1.25rem; color: #fafafa; }
+
+			.log-tags { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+			.log-tag {
+				font-size: 0.7rem; color: #a3a3a3; background-color: #171717;
+				border: 1px solid #262626; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-family: monospace;
+			}
+
+			.timestamps {
+				display: inline-flex; align-items: center; gap: 0.6rem;
+				font-family: monospace; font-size: 0.8rem;
+				background-color: #0a0a0a; border: 1px solid #262626; border-radius: 0.4rem;
+				padding: 0.6rem 0.9rem;
+			}
+			.timestamps .before { color: #fbbf24; }
+			.timestamps .after { color: #a3a3a3; }
+			.timestamps .arrow { color: #525252; }
+
+			.commit-link {
+				display: inline-flex; align-items: center; gap: 0.5rem;
+				font-family: monospace; font-size: 0.8rem; color: #e5e5e5; text-decoration: none;
+				border: 1px solid #262626; border-radius: 0.4rem; padding: 0.6rem 0.9rem;
+				background-color: #121212; transition: all 0.2s;
+			}
+			.commit-link:hover { border-color: #fbbf24; color: #fbbf24; transform: translateX(2px); }
+
+			footer { margin-top: 4rem; display: flex; flex-direction: column; gap: 1.5rem; }
+			.legal { font-size: 0.75rem; color: #525252; font-family: monospace; }
+		</style>
+		<style is:global>
+			.log-prose { margin-top: 3.5rem; color: #d4d4d4; line-height: 1.75; }
+			.log-prose h2 {
+				font-family: monospace; font-size: 1rem; letter-spacing: 0.12em; text-transform: uppercase;
+				color: #fbbf24; margin: 2.5rem 0 1rem; padding-bottom: 0.4rem;
+				border-bottom: 1px solid #262626;
+			}
+			.log-prose h3 { font-size: 1.05rem; font-weight: 600; color: #fafafa; margin: 2rem 0 0.75rem; }
+			.log-prose p { margin: 0 0 1.25rem; color: #a3a3a3; }
+			.log-prose strong { color: #e5e5e5; }
+			.log-prose .log-rule { border: none; border-top: 1px dashed #fbbf24; margin: 3rem 0; }
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<nav>
+				<a href="/">← 返回判断轨迹</a>
+				<a href={commitsUrl} target="_blank" rel="noopener noreferrer">Git 存证 ↗</a>
+			</nav>
+
+			<header>
+				<h1>{log.data.title}</h1>
+				<div class="log-tags">
+					{log.data.tags.map((tag) => <span class="log-tag">{tag}</span>)}
+				</div>
+				<div class="timestamps">
+					<span class="before">BEFORE: {formatDate(log.data.before_written_at)}</span>
+					<span class="arrow">→</span>
+					<span class="after">AFTER: {log.data.after_written_at ? formatDate(log.data.after_written_at) : '待验证'}</span>
+				</div>
+			</header>
+
+			<article class="log-prose" set:html={bodyHtml} />
+
+			<footer>
+				<a class="commit-link" href={commitsUrl} target="_blank" rel="noopener noreferrer">
+					在 GitHub 查看本文的提交历史 ↗
+				</a>
+				<p class="legal">Laity Studio © 2026. All judgments are timestamped.</p>
+			</footer>
+		</div>
+	</body>
+</html>

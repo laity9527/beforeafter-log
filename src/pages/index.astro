@@ -1,18 +1,10 @@
 ---
 import { getCollection } from 'astro:content';
+import { formatDate } from '../utils/format-date';
 
 const logs = (await getCollection('log')).sort(
 	(a, b) => b.data.before_written_at.getTime() - a.data.before_written_at.getTime()
 );
-
-// 固定展示时区：frontmatter 允许写带偏移的时间戳，按 UTC 截取会串到前一天
-const formatDate = (date: Date) =>
-	new Intl.DateTimeFormat('en-CA', {
-		timeZone: 'Asia/Shanghai',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-	}).format(date);
 ---
 
 <!DOCTYPE html>
