@@ -1,5 +1,18 @@
 ---
-// 前后志 - 首页 (优化版)
+import { getCollection } from 'astro:content';
+
+const logs = (await getCollection('log')).sort(
+	(a, b) => b.data.before_written_at.getTime() - a.data.before_written_at.getTime()
+);
+
+// 固定展示时区：frontmatter 允许写带偏移的时间戳，按 UTC 截取会串到前一天
+const formatDate = (date: Date) =>
+	new Intl.DateTimeFormat('en-CA', {
+		timeZone: 'Asia/Shanghai',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	}).format(date);
 ---
 
 <!DOCTYPE html>
@@ -157,34 +170,20 @@
 				<h2 class="section-title">判断轨迹</h2>
 				
 				<div class="log-list">
-					<!-- 日志条目 1 -->
-					<a href="/logs/why-this-site" class="log-item">
-						<div class="log-meta">
-							<span class="date">2026-10-23</span>
-							<span class="arrow">→</span>
-							<span>待验证</span>
-						</div>
-						<h3 class="log-title">我为什么把“平台想法”改成了“判断轨迹站”</h3>
-						<div class="log-tags">
-							<span class="log-tag">需求判断</span>
-							<span class="log-tag">AI协作</span>
-						</div>
-						<p class="log-lesson">我最初想做一个容纳所有矩阵的平台，但发现多用户系统冷启动太难，所以我决定先从个人的开发日志站做起...</p>
-					</a>
-
-					<!-- 日志条目 2 -->
-					<a href="/logs/laity-hub-design" class="log-item">
-						<div class="log-meta">
-							<span class="date">2026-10-24</span>
-							<span class="arrow">→</span>
-							<span>待验证</span>
-						</div>
-						<h3 class="log-title">主站为什么用 Bento Grid 而不是传统列表</h3>
-						<div class="log-tags">
-							<span class="log-tag">设计决策</span>
-						</div>
-						<p class="log-lesson">传统的作品集列表太无聊了。我选择便当盒布局，是为了让每个子项目像“舱室”一样...</p>
-					</a>
+					{logs.map((log) => (
+						<a href={`/log/${log.data.work_slug}`} class="log-item">
+							<div class="log-meta">
+								<span class="date">{formatDate(log.data.before_written_at)}</span>
+								<span class="arrow">→</span>
+								<span>{log.data.after_written_at ? formatDate(log.data.after_written_at) : '待验证'}</span>
+							</div>
+							<h3 class="log-title">{log.data.title}</h3>
+							<div class="log-tags">
+								{log.data.tags.map((tag) => <span class="log-tag">{tag}</span>)}
+							</div>
+							{log.data.lesson_learned && <p class="log-lesson">{log.data.lesson_learned}</p>}
+						</a>
+					))}
 				</div>
 
 			</section>
