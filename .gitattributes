@@ -1,0 +1,18 @@
+# 统一换行：仓库与工作区一律 LF（显式属性会覆盖本机 core.autocrlf=true，
+# 保证本机字节与 CI/Cloudflare Pages 检出的字节一致，不再出现「本地 CRLF、CI LF」的暧昧地带）
+* text=auto eol=lf
+
+# Windows 批处理脚本必须保持 CRLF（当前两个仓库都没有，留作防呆）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制：跳过换行转换，也不做文本比对
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
