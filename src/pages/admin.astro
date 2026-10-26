@@ -181,7 +181,9 @@
 				if (response.status === 404 || response.status === 405) {
 					return `接口未部署或路径不通（${response.status}），内容未写入仓库`;
 				}
-				return `${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+				// 平台级错误（Worker 崩了）回的不是我们的 JSON，把 cf-ray 带出来才能去 Pages 日志里查
+				const cfRay = response.headers.get('cf-ray');
+				return `${response.status}${response.statusText ? ` ${response.statusText}` : ''}${cfRay ? ` · 非接口响应，CF-Ray ${cfRay}` : ''}`;
 			};
 
 			form.addEventListener('submit', async (event) => {

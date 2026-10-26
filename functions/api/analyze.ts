@@ -302,7 +302,14 @@ export const onRequestPost: PagesFunction<AnalyzeEnv> = async (context) => {
 		const gh = await fetch(`https://api.github.com/repos/${ALLOWED_REPO}/commits/${sha}`, {
 			headers: ghHeaders(env.GITHUB_TOKEN!),
 		});
-		if (gh.status === 404) return json(404, { ok: false, error: `仓库里找不到 commit ${sha.slice(0, 12)}` });
+		// GitHub 对「sha 不存在」给的是 422 而不是 404，两种都要当找不到 commit，否则用户只看到上游故障
+		if (gh.status === 404 || gh.status === 422) {
+			return json(404, {
+				ok: false,
+				error: `仓库里找不到 commit ${sha.slice(0, 12)}…（GitHub 返回 ${gh.status}）`,
+				detail: 'sha 必须是这个仓库里真实存在的提交；从 git log --format="%H" 复制完整 40 位最稳',
+			});
+		}
 		if (!gh.ok) {
 			const detail = (await gh.text()).slice(0, 200);
 			return json(502, { ok: false, error: `GitHub 读取 commit 失败（${gh.status}）`, detail });
