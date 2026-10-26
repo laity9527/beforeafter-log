@@ -179,9 +179,11 @@ const sealedCount = logs.filter((log) =>
 								<span>{log.data.after_written_at ? formatDate(log.data.after_written_at) : '待验证'}</span>
 							</div>
 							<h3 class="log-title">{log.data.title}</h3>
-							<div class="log-tags">
-								{log.data.tags.map((tag) => <span class="log-tag">{tag}</span>)}
-							</div>
+							{log.data.tags.length > 0 && (
+								<div class="log-tags">
+									{log.data.tags.map((tag) => <span class="log-tag">{tag}</span>)}
+								</div>
+							)}
 							{log.data.lesson_learned && <p class="log-lesson">{log.data.lesson_learned}</p>}
 						</a>
 					))}

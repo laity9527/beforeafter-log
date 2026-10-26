@@ -144,9 +144,11 @@ const fileSlug = log.id;
 
 			<header>
 				<h1>{log.data.title}</h1>
-				<div class="log-tags">
-					{log.data.tags.map((tag) => <span class="log-tag">{tag}</span>)}
-				</div>
+				{log.data.tags.length > 0 && (
+					<div class="log-tags">
+						{log.data.tags.map((tag) => <span class="log-tag">{tag}</span>)}
+					</div>
+				)}
 				<div class="timestamps">
 					<span class="before">BEFORE: {formatDate(log.data.before_written_at)}</span>
 					<span class="arrow">→</span>

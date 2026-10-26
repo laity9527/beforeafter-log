@@ -126,6 +126,23 @@
 				after: String(data.get('after') ?? '').trim() || null,
 			});
 
+			const describeFailure = async (response) => {
+				const details = [];
+				let serverError = null;
+				try {
+					const data = await response.json();
+					if (typeof data?.error === 'string') serverError = data.error;
+					if (typeof data?.detail === 'string' && data.detail) details.push(data.detail);
+				} catch {
+					// 网关或静态托管回的不一定是 JSON，落到下面的状态码文案
+				}
+				if (serverError) return details.length > 0 ? `${serverError} · ${details.join(' · ')}` : serverError;
+				if (response.status === 404 || response.status === 405) {
+					return `接口未部署或路径不通（${response.status}），内容未写入仓库`;
+				}
+				return `${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+			};
+
 			form.addEventListener('submit', async (event) => {
 				event.preventDefault();
 				const payload = buildPayload(new FormData(form));
@@ -146,12 +163,8 @@
 					if (response.ok) {
 						form.reset();
 						setStatus('发布成功，等待构建', 'ok');
-					} else if (response.status === 404 || response.status === 405) {
-						// 静态站点没有可执行后端，这个分支现在一定会走到，别把裸状态码当结论
-						setStatus(`发布失败：/api/publish 没有接住请求（${response.status}），内容未写入仓库`, 'error');
 					} else {
-						const body = await response.text();
-						setStatus(`发布失败：${response.status} ${response.statusText}${body ? ` · ${body.slice(0, 120)}` : ''}`, 'error');
+						setStatus(`发布失败：${await describeFailure(response)}`, 'error');
 					}
 				} catch (error) {
 					setStatus(`发布失败：请求没有发出去（${error.message}）`, 'error');
