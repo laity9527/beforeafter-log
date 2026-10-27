@@ -1,0 +1,277 @@
+---
+import SiteHead from '../components/SiteHead.astro';
+import { rawUrl, verifyCommand } from '../utils/github';
+
+const sampleSlug = 'why-this-site';
+const sampleRawUrl = rawUrl(sampleSlug);
+const sampleCommand = verifyCommand(sampleSlug);
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+	<head>
+		<SiteHead
+			title="校验器 | 前后志"
+			description="把日志原文粘进来，浏览器本地算出整文件与 BEFORE / AFTER 段落指纹，和页面上公布的值一比就知道内容有没有被改过。不上传，不请求服务端。"
+		/>
+		<style>
+			* { box-sizing: border-box; margin: 0; padding: 0; }
+			body {
+				background-color: #050505; color: #e5e5e5;
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+				line-height: 1.7; padding: 0 1.5rem;
+			}
+			.container { max-width: 72ch; margin: 0 auto; padding: 5rem 0; }
+			nav {
+				display: flex; justify-content: space-between; align-items: center;
+				font-size: 0.85rem; margin-bottom: 3.5rem; font-family: monospace;
+			}
+			nav a { color: #737373; text-decoration: none; transition: color 0.2s; }
+			nav a:hover { color: #fbbf24; }
+			h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; color: #fafafa; margin-bottom: 0.9rem; }
+			.lede { color: #a3a3a3; margin-bottom: 2.5rem; }
+			h2 {
+				font-family: monospace; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase;
+				color: #fbbf24; margin: 2.8rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid #262626;
+			}
+			p { color: #a3a3a3; margin-bottom: 1rem; }
+			strong { color: #e5e5e5; }
+			code {
+				font-family: monospace; font-size: 0.85em; color: #d4d4d4;
+				background-color: #121212; border: 1px solid #262626; border-radius: 0.25rem; padding: 0.05rem 0.3rem;
+			}
+			.cmd {
+				display: block; margin: 0.4rem 0 1.4rem; padding: 0.7rem 0.85rem;
+				background-color: #0a0a0a; border: 1px solid #262626; border-radius: 0.4rem;
+				font-family: monospace; font-size: 0.7rem; color: #a3a3a3; word-break: break-all;
+			}
+			textarea {
+				width: 100%; min-height: 14rem; padding: 0.9rem;
+				background-color: #0a0a0a; color: #d4d4d4; border: 1px solid #262626; border-radius: 0.45rem;
+				font-family: monospace; font-size: 0.78rem; line-height: 1.6; resize: vertical;
+			}
+			textarea:focus { outline: none; border-color: #525252; }
+			.toolbar { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.9rem 0 1.4rem; }
+			button {
+				font-family: monospace; font-size: 0.76rem; color: #e5e5e5; cursor: pointer;
+				background-color: #121212; border: 1px solid #262626; border-radius: 0.4rem; padding: 0.55rem 0.85rem;
+				transition: all 0.2s;
+			}
+			button:hover { border-color: #fbbf24; color: #fbbf24; }
+			button:disabled { opacity: 0.5; cursor: progress; }
+			table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-family: monospace; font-size: 0.74rem; }
+			th {
+				text-align: left; color: #525252; font-weight: 400; letter-spacing: 0.06em;
+				padding: 0.5rem 0.6rem; border-bottom: 1px solid #262626;
+			}
+			td { padding: 0.65rem 0.6rem; border-bottom: 1px solid #171717; vertical-align: top; word-break: break-all; }
+			.hash { color: #d4d4d4; }
+			.empty { color: #525252; }
+			input.expected {
+				width: 100%; padding: 0.4rem 0.5rem; background-color: #0a0a0a; color: #d4d4d4;
+				border: 1px solid #262626; border-radius: 0.3rem; font-family: monospace; font-size: 0.72rem;
+			}
+			input.expected:focus { outline: none; border-color: #525252; }
+			.verdict { font-weight: 700; white-space: nowrap; }
+			.verdict-match { color: #10b981; }
+			.verdict-diff { color: #ef4444; }
+			.verdict-wait { color: #525252; }
+			.slice {
+				display: block; max-height: 9rem; overflow: auto; padding: 0.7rem 0.85rem;
+				background-color: #0a0a0a; border: 1px dashed #262626; border-radius: 0.4rem;
+				font-family: monospace; font-size: 0.72rem; color: #a3a3a3; white-space: pre-wrap;
+			}
+			.note {
+				margin-top: 2.5rem; padding: 1rem 1.1rem; border: 1px solid #262626; border-radius: 0.45rem;
+				background-color: #0d0d0d; font-size: 0.82rem; color: #a3a3a3;
+			}
+			.note p:last-child { margin-bottom: 0; }
+			footer { margin-top: 3.5rem; font-size: 0.72rem; color: #525252; font-family: monospace; }
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<nav>
+				<a href="/">← 返回判断轨迹</a>
+				<a href="/about/">方法论 ↗</a>
+			</nav>
+
+			<h1>校验器</h1>
+			<p class="lede">
+				把一条日志的原文贴进来，这一页在<strong>你的浏览器里</strong>算出 SHA-256，和详情页公布的指纹比对。
+				不上传、不请求我们的服务器，源码就在 <code>src/utils/seal-web.ts</code>。
+			</p>
+
+			<h2>1 · 取原文</h2>
+			<p>
+				要么用命令行拿（这条同时复算了整文件指纹，不需要本页）：
+				<span class="cmd">{sampleCommand}</span>
+				要么点下面的按钮让浏览器直接去 GitHub 取远端那份字节。
+			</p>
+			<div class="toolbar">
+				<button type="button" id="fetch-btn" data-url={sampleRawUrl}>从 raw.githubusercontent.com 拉取</button>
+				<button type="button" id="clear-btn">清空</button>
+			</div>
+
+			<h2>2 · 粘贴原文</h2>
+			<textarea id="source" spellcheck="false" placeholder="把 .md 的完整内容贴在这里，包括 --- 开头的 frontmatter 和 ## BEFORE / ## AFTER 两行标题"></textarea>
+
+			<h2>3 · 与公布的指纹比对</h2>
+			<p>把详情页 <code>Git 存证</code> 面板里的值粘到右列，逐条判对。段落行留空表示原文里没有这一段。</p>
+			<table>
+				<thead>
+					<tr><th>范围</th><th>本页算出</th><th>公布的指纹</th><th>判定</th></tr>
+				</thead>
+				<tbody id="rows"></tbody>
+			</table>
+
+			<h2>4 · 段落到底算了哪些字节</h2>
+			<p>规则：从 <code>## BEFORE</code> 标题行本身开始，到下一个 <code>## </code> 之前结束，裁掉尾部空白、不带结尾换行。下面就是实际进哈希的那段。</p>
+			<span class="slice" id="slice-before">（还没输入）</span>
+			<span class="slice" id="slice-after">（还没输入）</span>
+
+			<div class="note">
+				<p><strong>这一页能证明什么：</strong>你手上的这份正文，和作者在 <code>&lt;slug&gt;.seal.json</code> 里公布的那次封存是同一份内容——逐字节相同。</p>
+				<p><strong>它不能证明什么：</strong>不能证明这段判断写于动手之前。时间戳由作者自己填，构建只认内容不认日历；要堵这一条得引入外部时间锚，本项目目前没接，属于公开的已知限度。</p>
+				<p>整文件指纹只做 CRLF→LF 归一化；段落指纹额外裁尾部空白。这两条口径与生成账本的 <code>src/utils/seal.ts</code> 完全一致，由 <code>scripts/verify-web-checker.mjs</code> 逐条对拍保证。</p>
+			</div>
+
+			<footer>Laity Studio © 2026. All judgments are timestamped.</footer>
+		</div>
+	</body>
+
+	<script>
+		import { extractSection, fileHash, sectionHash } from '../utils/seal-web';
+
+		const source = document.getElementById('source');
+		const rows = document.getElementById('rows');
+		const fetchBtn = document.getElementById('fetch-btn');
+		const clearBtn = document.getElementById('clear-btn');
+		const remoteUrl = fetchBtn.dataset.url ?? '';
+		const slices = {
+			before: document.getElementById('slice-before'),
+			after: document.getElementById('slice-after'),
+		};
+
+		const scopes = [
+			{ key: 'file', label: '整文件' },
+			{ key: 'before', label: 'BEFORE 段' },
+			{ key: 'after', label: 'AFTER 段' },
+		];
+		const expectedInputs = {};
+
+		for (const scope of scopes) {
+			const tr = document.createElement('tr');
+			const tdName = document.createElement('td');
+			tdName.textContent = scope.label;
+			const tdHash = document.createElement('td');
+			tdHash.className = 'hash';
+			tdHash.textContent = '—';
+			const tdExpect = document.createElement('td');
+			const input = document.createElement('input');
+			input.className = 'expected';
+			input.type = 'text';
+			input.inputMode = 'numeric';
+			input.spellcheck = false;
+			input.autocomplete = 'off';
+			input.placeholder = '粘贴 64 位十六进制';
+			tdExpect.appendChild(input);
+			const tdVerdict = document.createElement('td');
+			tdVerdict.className = 'verdict verdict-wait';
+			tdVerdict.textContent = '待比对';
+			tr.append(tdName, tdHash, tdExpect, tdVerdict);
+			rows.appendChild(tr);
+			expectedInputs[scope.key] = { input, tdHash, tdVerdict };
+			input.addEventListener('input', () => render());
+		}
+
+		let computed = { file: '', before: '', after: '' };
+
+		function normalizeInput(value) {
+			return value.trim().toLowerCase();
+		}
+
+		function verdict(key, hash) {
+			const cell = expectedInputs[key];
+			if (!hash) {
+				cell.tdHash.textContent = '原文里没有这一段';
+				cell.tdHash.className = 'hash empty';
+				cell.tdVerdict.textContent = '不适用';
+				cell.tdVerdict.className = 'verdict verdict-wait';
+				return;
+			}
+			cell.tdHash.textContent = hash;
+			cell.tdHash.className = 'hash';
+			const expected = normalizeInput(cell.input.value);
+			if (!expected) {
+				cell.tdVerdict.textContent = '待比对';
+				cell.tdVerdict.className = 'verdict verdict-wait';
+				return;
+			}
+			if (!/^[0-9a-f]{64}$/.test(expected)) {
+				cell.tdVerdict.textContent = '格式不对';
+				cell.tdVerdict.className = 'verdict verdict-wait';
+				return;
+			}
+			const same = expected === hash;
+			cell.tdVerdict.textContent = same ? '一致' : '不一致';
+			cell.tdVerdict.className = 'verdict ' + (same ? 'verdict-match' : 'verdict-diff');
+		}
+
+		function render() {
+			for (const scope of scopes) verdict(scope.key, computed[scope.key]);
+		}
+
+		let token = 0;
+		source.addEventListener('input', async () => {
+			const mine = ++token;
+			const text = source.value;
+			if (!text) {
+				computed = { file: '', before: '', after: '' };
+				slices.before.textContent = '（还没输入）';
+				slices.after.textContent = '（还没输入）';
+				render();
+				return;
+			}
+			const sections = { before: extractSection(text, 'before'), after: extractSection(text, 'after') };
+			const next = {
+				file: await fileHash(text),
+				before: sections.before ? await sectionHash(sections.before) : '',
+				after: sections.after ? await sectionHash(sections.after) : '',
+			};
+			// 连续输入时只认最后一次的结果，免得旧哈希盖掉新哈希
+			if (mine !== token) return;
+			computed = next;
+			slices.before.textContent = sections.before || '（原文里没有 ## BEFORE）';
+			slices.after.textContent = sections.after || '（原文里没有 ## AFTER）';
+			render();
+		});
+
+		clearBtn.addEventListener('click', () => {
+			source.value = '';
+			for (const scope of scopes) expectedInputs[scope.key].input.value = '';
+			source.dispatchEvent(new Event('input'));
+		});
+
+		fetchBtn.addEventListener('click', async () => {
+			fetchBtn.disabled = true;
+			const original = fetchBtn.textContent;
+			fetchBtn.textContent = '拉取中…';
+			try {
+				const res = await fetch(remoteUrl, { cache: 'no-store' });
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				source.value = await res.text();
+				source.dispatchEvent(new Event('input'));
+				fetchBtn.textContent = '已取到，可比对了';
+			} catch (error) {
+				fetchBtn.textContent = '拉取失败，改用粘贴';
+				console.warn('/verify 拉取远端原文失败', String(error));
+				window.setTimeout(() => {
+					fetchBtn.textContent = original;
+				}, 2600);
+			} finally {
+				fetchBtn.disabled = false;
+			}
+		});
+	</script>
+</html>

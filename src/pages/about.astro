@@ -74,6 +74,7 @@ const sampleVerifyCommand = 'curl -sL https://raw.githubusercontent.com/laity952
 			<p>每条日志页脚的命令就能复算整份文件，输出应等于页面上公布的整文件指纹：</p>
 			<code class="cmd">{sampleVerifyCommand}</code>
 			<p>段落指纹的口径是：从 <code>## BEFORE</code> 标题行起，到下一个二级标题或文件末尾为止的那段原文，裁掉尾部空白后取 SHA-256。锚定的那次提交也可以在 <a href={commitsUrl('why-this-site')} target="_blank" rel="noopener noreferrer">提交历史</a> 里逐条看。</p>
+			<p>不想在终端里切段落，可以用 <a href="/verify/">网页校验器</a>：把原文粘进去，浏览器在本地算出整文件与两段段落指纹，和公布的值逐条判对。它和生成账本用的是同一套归一化口径，两边等价性由 <code>npm run verify:web</code> 对拍。</p>
 
 			<h2>四、AI 在哪里</h2>
 			<p>后台可以读一个 commit 让模型写 <strong>AFTER</strong> 的实现总结。但 <strong>BEFORE 不允许 AI 代写</strong>：这个接口跑在提交之后，反推出来的「预判」是回溯性虚构，一旦进日志再封存，就等于把虚构洗成不可篡改的历史证据。所以服务端会把模型给出的 BEFORE 段整段丢弃、换成一句占位，占位没被本人改写之前，前端不允许发布。</p>

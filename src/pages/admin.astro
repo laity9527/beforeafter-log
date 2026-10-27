@@ -62,6 +62,14 @@ import SiteHead from '../components/SiteHead.astro';
 				border: 1px dashed #262626; border-radius: 0.5rem; padding: 1.25rem;
 				margin-bottom: 2.5rem; background-color: #0a0a0a;
 			}
+			.block-title {
+				font-family: monospace; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase;
+				color: #fbbf24; margin-bottom: 0.6rem;
+			}
+			.ai code {
+				font-family: monospace; font-size: 0.82em; color: #d4d4d4;
+				background-color: #121212; border: 1px solid #262626; border-radius: 0.25rem; padding: 0.02rem 0.25rem;
+			}
 			.spinner {
 				display: none; width: 12px; height: 12px; margin-right: 0.5rem;
 				border: 2px solid #262626; border-top-color: #fbbf24; border-radius: 50%;
@@ -132,6 +140,36 @@ import SiteHead from '../components/SiteHead.astro';
 				<button type="submit" id="submit-btn">发布</button>
 				<p class="status" id="status" role="status" aria-live="polite"></p>
 			</form>
+
+			<div class="ai">
+				<h2 class="block-title">补齐一条已发布日志的 AFTER</h2>
+				<p class="hint">
+					服务端只改 frontmatter 的 <code>after_written_at</code> 和 <code>## AFTER</code> 段，
+					<strong>已封存的 BEFORE 一个字节都不动</strong>；正文与新的封存记录分两次提交，
+					但分支只在最后更新一次，所以不会出现「门禁红着等人收尾」的中间状态。
+				</p>
+				<label>
+					Admin Password
+					<input type="password" id="fill-password" autocomplete="off" />
+				</label>
+				<label>
+					日志标识 slug
+					<input type="text" id="fill-slug" placeholder="why-this-site" pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+						title="小写字母、数字与短横线，即 src/content/logs/&lt;slug&gt;.md 的文件名" />
+					<span>要补 AFTER 的那条日志，BEFORE 段不会被改动</span>
+				</label>
+				<label>
+					验证日期 after_written_at
+					<input type="date" id="fill-date" />
+					<span>你确实回头核对的那一天，不是今天随手填的占位</span>
+				</label>
+				<label>
+					AFTER 正文
+					<textarea id="fill-after" rows="7" placeholder="实际上线结果与当初判断的偏差"></textarea>
+				</label>
+				<button type="button" id="fill-btn">补齐 AFTER 并封存</button>
+				<p class="status" id="fill-status" role="status" aria-live="polite"></p>
+			</div>
 		</div>
 
 		<script>
@@ -304,6 +342,80 @@ import SiteHead from '../components/SiteHead.astro';
 					analyzeBtn.disabled = false;
 					analyzeBtn.removeAttribute('aria-busy');
 					delete analyzeBtn.dataset.busy;
+				}
+			});
+
+			const fillBtn = document.getElementById('fill-btn');
+			const fillStatusEl = document.getElementById('fill-status');
+			const setFillStatus = (text, kind) => writeStatus(fillStatusEl, text, kind);
+			const FILL_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+			const FILL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+			// 前端这几条只是少跑一趟，服务端 after.ts 才是控制；两边规则要保持一致
+			fillBtn.addEventListener('click', async () => {
+				const password = document.getElementById('fill-password').value;
+				const slug = document.getElementById('fill-slug').value.trim();
+				const afterWrittenAt = document.getElementById('fill-date').value;
+				const after = document.getElementById('fill-after').value.trim();
+
+				if (!password) {
+					setFillStatus('先填 Admin Password', 'error');
+					return;
+				}
+				if (!FILL_SLUG_RE.test(slug)) {
+					setFillStatus('slug 只能是小写字母、数字与单个短横线分隔', 'error');
+					return;
+				}
+				if (!FILL_DATE_RE.test(afterWrittenAt)) {
+					setFillStatus('验证日期要选一个真实回头核对过的日期', 'error');
+					return;
+				}
+				if (!after) {
+					setFillStatus('AFTER 正文不能为空——还没验证就别补，留着「未到验证期」才是诚实状态', 'error');
+					return;
+				}
+				if (/^##\s/m.test(after)) {
+					setFillStatus('AFTER 正文里不要写二级标题，段落标题由服务端写入', 'error');
+					return;
+				}
+
+				const idleLabel = fillBtn.textContent;
+				fillBtn.disabled = true;
+				fillBtn.setAttribute('aria-busy', 'true');
+				fillBtn.textContent = '提交中…';
+				setFillStatus('正在提交：正文一次提交、封存记录一次提交，最后一次性推进分支…', 'pending');
+
+				try {
+					const response = await fetch('/api/after', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ password, slug, after, after_written_at: afterWrittenAt }),
+					});
+					const { payload } = await readApiResponse(response);
+					if (isSuccessfulResponse(response, payload)) {
+						if (payload?.data?.unchanged === true) {
+							setFillStatus('内容与仓库已经一致，没有产生提交', 'ok');
+						} else {
+							const data = payload?.data ?? {};
+							setFillStatus(
+								`已补齐并封存：正文 ${String(data.content_commit).slice(0, 7)} · 封存 ${String(data.seal_commit).slice(0, 7)}，Pages 构建完详情页就会带上 AFTER`,
+								'ok'
+							);
+							document.getElementById('fill-after').value = '';
+							document.getElementById('fill-password').value = '';
+						}
+					} else {
+						setFillStatus(
+							`补齐失败：${describeFailure(response, payload, '若提示正文已提交，按 detail 里的命令本地补一次封存')}`,
+							'error'
+						);
+					}
+				} catch (error) {
+					setFillStatus(`补齐失败：请求没有发出去（${error.message}）`, 'error');
+				} finally {
+					fillBtn.disabled = false;
+					fillBtn.removeAttribute('aria-busy');
+					fillBtn.textContent = idleLabel;
 				}
 			});
 		</script>

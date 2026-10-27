@@ -8,9 +8,14 @@ const logs = (await getCollection('log')).sort(
 );
 
 const ledgers = await getCollection('seal');
-const sealedCount = logs.filter((log) =>
-	ledgers.some((ledger) => ledger.data.slug === log.id && ledger.data.seals.length > 0)
-).length;
+// 徽章要说真话：一次封存只钉住一段。.seals.length > 0 会把「只封了 BEFORE」说成「整条已封存」，
+// 所以按段计数，AFTER 没封就明说没封——这也正是「事后回来兑现」的催更信号。
+const sealedByStage = (stage: 'before' | 'after') =>
+	logs.filter((log) =>
+		ledgers.some((ledger) => ledger.data.slug === log.id && ledger.data.seals.some((seal) => seal.stage === stage))
+	).length;
+const beforeSealed = sealedByStage('before');
+const afterSealed = sealedByStage('after');
 ---
 
 <!DOCTYPE html>
@@ -138,9 +143,9 @@ const sealedCount = logs.filter((log) =>
 			<header>
 				<h1>前后志</h1>
 				<p class="subtitle">不囤想法，直接上线。<br>每个作品，都有做之前和做之后。</p>
-				<span class:list={['trust-badge', { pending: sealedCount < logs.length }]}>
+				<span class:list={['trust-badge', { pending: beforeSealed < logs.length || afterSealed < logs.length }]}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
-					Git 存证 {sealedCount}/{logs.length} 条已封存
+					Git 存证 BEFORE {beforeSealed}/{logs.length} · AFTER {afterSealed}/{logs.length}
 				</span>
 			</header>
 

@@ -219,6 +219,9 @@ const description = summary.length > 150 ? `${summary.slice(0, 149)}…` : summa
 							<code>{currentFileHash}</code>
 							<span class="proof-cmd">{verifyCommand(fileSlug)}</span>
 							<p class="proof-limit">
+								不想敲命令：<a href="/verify/">在本机浏览器里算一遍 →</a>
+							</p>
+							<p class="proof-limit">
 								构建时如果正文与上面任一段落指纹不一致会直接失败，所以这一页渲染出来就等于机器已经比对过。
 								但它证明不了本机「改了内容再重新封存一次」——那种情况只能靠左侧提交历史里那次 diff。
 							</p>

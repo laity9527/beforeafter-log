@@ -7,12 +7,15 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/verify-seals.mjs && astro build",
     "seal": "node scripts/seal.mjs",
     "verify": "node scripts/verify-api-result.mjs",
     "verify:functions": "node scripts/verify-functions.mjs",
+    "verify:after": "node scripts/verify-after.mjs",
+    "verify:seals": "node scripts/verify-seals.mjs",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "verify:web": "node scripts/verify-web-checker.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
