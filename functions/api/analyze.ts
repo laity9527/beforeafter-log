@@ -337,6 +337,25 @@ async function handleAnalyze(context: Parameters<PagesFunction<AnalyzeEnv>>[0]):
 		digest,
 	});
 
+	// dry_run 只走到「拼好 prompt」为止：用来区分被平台杀掉的是前半段（GitHub+摘要）还是模型子请求
+	if (body.dry_run === true) {
+		return json(200, {
+			ok: true,
+			data: {
+				dry_run: true,
+				commit: { sha: commit.sha, short: commit.sha.slice(0, 7), message: commit.commit?.message ?? '' },
+				diff: { included: digest.filesIncluded, total: digest.filesTotal, truncated: digest.truncated },
+				prompt: {
+					system_chars: messages[0].content.length,
+					user_chars: messages[1].content.length,
+					user_head: messages[1].content.slice(0, 400),
+				},
+				quota_used_today: quota.used,
+				quota_limit: quota.limit,
+			},
+		});
+	}
+
 	try {
 		const { content, model } = await callLlm(env, messages);
 		const draft = enforceBeforePlaceholder(content);
