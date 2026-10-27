@@ -32,7 +32,7 @@ if (problems.length > 0) {
 	throw new Error(`存证校验失败 ${log.id}\n    ${problems.join('\n    ')}`);
 }
 
-// eager-render 结果与 RSS 共用；deferRender 一旦被打开这里就没有正文可用
+// eager-render 结果直接用于详情页插入正文；deferRender 一旦被打开这里就没有正文可用
 const renderedHtml = log.rendered?.html;
 if (renderedHtml === undefined) {
 	throw new Error(`日志 ${log.id} 没有渲染结果，检查 src/content.config.ts 的 deferRender`);
