@@ -32,6 +32,15 @@ const json = (status: number, body: Record<string, unknown>) =>
 		headers: { 'Content-Type': 'application/json' },
 	});
 
+// 只拦「浏览器从别的站发过来」这一种：Origin 缺失（curl、服务端脚本）照旧放行，
+// 免得把已有的排障方式打死。本站两个域都从请求自己的 host 推，不需要维护白名单。
+// 这个接口靠 body 里的密码鉴权、不骑 cookie，所以这一层是纵深防御而非必需的 CSRF 门禁。
+export const crossSiteOrigin = (request: Request): string | null => {
+	const origin = request.headers.get('origin');
+	if (!origin || origin === new URL(request.url).origin) return null;
+	return origin;
+};
+
 // 先摘要再逐字节比完，不做提前返回，避免用响应时间反推密码长度/前缀
 async function passwordsMatch(candidate: string, expected: string): Promise<boolean> {
 	const digest = async (value: string) =>
@@ -167,6 +176,9 @@ const ghHeaders = (token: string) => ({
 
 export const onRequestPost: PagesFunction<PublishEnv> = async (context) => {
 	const { ADMIN_PASSWORD, GITHUB_TOKEN } = context.env;
+
+	const hostile = crossSiteOrigin(context.request);
+	if (hostile) return json(403, { ok: false, error: '请求来源与本站不一致，已拒绝', detail: `Origin: ${hostile}` });
 
 	if (!ADMIN_PASSWORD || !GITHUB_TOKEN) {
 		return json(500, { ok: false, error: '服务端未配置 ADMIN_PASSWORD / GITHUB_TOKEN，发布不可用' });

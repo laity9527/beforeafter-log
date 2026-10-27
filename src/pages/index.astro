@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import SiteHead from '../components/SiteHead.astro';
 import { formatDate } from '../utils/format-date';
 
 const logs = (await getCollection('log')).sort(
@@ -15,9 +16,10 @@ const sealedCount = logs.filter((log) =>
 <!DOCTYPE html>
 <html lang="zh-CN">
 	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>前后志 | Laity Studio</title>
+		<SiteHead
+			title="前后志 | Laity Studio"
+			description="不囤想法，直接上线。每个作品都留下做之前的判断和做之后的实现，两条时间戳和段落指纹钉在 Git 里，可以自己核对。"
+		/>
 		<style>
 			/* 基础与排版 */
 			* { box-sizing: border-box; margin: 0; padding: 0; }
@@ -129,7 +131,7 @@ const sealedCount = logs.filter((log) =>
 			<!-- 导航 -->
 			<nav>
 				<a href="https://laity.work">← 返回 Laity</a>
-				<a href="/about">关于方法论 ↗</a>
+				<a href="/about/">关于方法论 ↗</a>
 			</nav>
 
 			<!-- Hero -->
@@ -171,8 +173,11 @@ const sealedCount = logs.filter((log) =>
 				<h2 class="section-title">判断轨迹</h2>
 				
 				<div class="log-list">
+					{/* 详情页由 getStaticPaths 用 log.id 生成路由，链接也跟 log.id；
+					    work_slug 只是 frontmatter 里的声明，文件名一旦和它对不上这里就会 404。
+					    带上尾斜杠：Pages 会把 /log/x 308 到 /log/x/，省掉这一跳。 */}
 					{logs.map((log) => (
-						<a href={`/log/${log.data.work_slug}`} class="log-item">
+						<a href={`/log/${log.id}/`} class="log-item">
 							<div class="log-meta">
 								<span class="date">{formatDate(log.data.before_written_at)}</span>
 								<span class="arrow">→</span>

@@ -10,10 +10,12 @@
     "build": "astro build",
     "seal": "node scripts/seal.mjs",
     "verify": "node scripts/verify-api-result.mjs",
+    "verify:functions": "node scripts/verify-functions.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/sitemap": "^3.7.4",
     "astro": "^7.4.2"
   },
   "devDependencies": {

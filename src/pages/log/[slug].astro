@@ -3,6 +3,7 @@ import type { CollectionEntry } from 'astro:content';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getCollection } from 'astro:content';
+import SiteHead from '../../components/SiteHead.astro';
 import { formatDate, formatDateTime } from '../../utils/format-date';
 import { blobUrl, commitUrl, commitsUrl, verifyCommand } from '../../utils/github';
 import { hashFile, verifyLedger } from '../../utils/seal';
@@ -39,23 +40,36 @@ if (renderedHtml === undefined) {
 }
 
 // Markdown 正文渲染结果不是 scoped 元素，插入的分隔线样式写在 is:global 块里
-const bodyHtml = renderedHtml.replace(
+const RULE = '<hr class="log-rule" />';
+const markedHtml = renderedHtml.replace(
 	/<h2\b[^>]*>(?:\s*<[^>]+>)*\s*AFTER\b/i,
-	'<hr class="log-rule">$&'
+	`${RULE}$&`
 );
+
+// 还没到验证期：AFTER 段整块套进灰色虚线框，只改呈现，不动 .md、不改封存
+const cut = markedHtml.indexOf(RULE);
+const pendingAfter = log.data.after_written_at === undefined && cut >= 0;
+const bodyHtml = pendingAfter
+	? `${markedHtml.slice(0, cut + RULE.length)}<div class="log-pending">` +
+	  `<p class="log-pending-tag">AFTER · 未到验证期，以下是动手之后记下的一段，还没有回填验证时间</p>` +
+	  `${markedHtml.slice(cut + RULE.length)}</div>`
+	: markedHtml;
 
 const seals = ledger?.seals ?? [];
 const currentFileHash = hashFile(rawText);
 // 溯源 URL 指向的是文件名（entry.id），不是 work_slug
 const fileSlug = log.id;
+
+// 摘要只有 lesson_learned 一个真实字段可用，缺了就退回固定句式，不编内容
+const summary =
+	log.data.lesson_learned?.trim() || `${log.data.title}：做之前的判断与做之后的实现，钉在同一条提交记录上。`;
+const description = summary.length > 150 ? `${summary.slice(0, 149)}…` : summary;
 ---
 
 <!DOCTYPE html>
 <html lang="zh-CN">
 	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>{log.data.title} | 前后志</title>
+		<SiteHead title={`${log.data.title} | 前后志`} description={description} ogType="article" />
 		<style>
 			* { box-sizing: border-box; margin: 0; padding: 0; }
 			body {
@@ -139,6 +153,15 @@ const fileSlug = log.id;
 			.log-prose p { margin: 0 0 1.25rem; color: #a3a3a3; }
 			.log-prose strong { color: #e5e5e5; }
 			.log-prose .log-rule { border: none; border-top: 1px dashed #fbbf24; margin: 3rem 0; }
+			.log-pending {
+				border: 1px dashed #525252; border-radius: 0.5rem; padding: 0 1.1rem 1.1rem;
+				background-color: #0d0d0d;
+			}
+			.log-pending-tag {
+				font-family: monospace; font-size: 0.72rem; letter-spacing: 0.06em; color: #737373;
+				margin: 1.5rem 0 0 !important; padding-bottom: 0.75rem; border-bottom: 1px dashed #262626;
+			}
+			.log-pending h2 { color: #a3a3a3; }
 		</style>
 	</head>
 	<body>

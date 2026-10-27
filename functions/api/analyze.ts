@@ -65,14 +65,35 @@ const ghHeaders = (token: string) => ({
 	'User-Agent': 'beforeafter-log-analyze',
 });
 
+/** 额度按东八区自然日算，和详情页展示的时间戳同一把尺；按 UTC 日会把重置点挪到北京时间早上 8 点 */
+export const shanghaiDay = (d: Date) =>
+	new Intl.DateTimeFormat('en-CA', {
+		timeZone: 'Asia/Shanghai',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	}).format(d);
+
 /** 先计数再干活：模型挂了或被客户端打断也要扣额度，否则死循环请求会把预算烧穿 */
-async function consumeQuota(kv: KVNamespace, limit: number, now: Date) {
-	const key = `analyze:${now.toISOString().slice(0, 10)}`;
+export async function consumeQuota(kv: KVNamespace, limit: number, now: Date) {
+	const key = `analyze:${shanghaiDay(now)}`;
 	const used = Number((await kv.get(key)) ?? '0') || 0;
 	if (used >= limit) return { allowed: false, used, limit };
 	await kv.put(key, String(used + 1));
 	return { allowed: true, used: used + 1, limit };
 }
+
+/**
+ * 只拦「浏览器从别的站发过来」这一种：Origin 缺失（curl、服务端脚本、老浏览器）照旧放行，
+ * 免得把已有的排障方式打死。本站两个域（build.laity.work / *.pages.dev）都从请求自己的
+ * host 推，不用维护白名单。注意这两个接口靠 body 里的密码鉴权、不骑 cookie，
+ * 所以这一层是纵深防御，不是必需的 CSRF 门禁。
+ */
+export const crossSiteOrigin = (request: Request): string | null => {
+	const origin = request.headers.get('origin');
+	if (!origin || origin === new URL(request.url).origin) return null;
+	return origin;
+};
 
 export function digestCommit(commit: GhCommitResponse) {
 	const files = commit.files ?? [];
@@ -253,6 +274,8 @@ async function callLlm(
 
 async function handleAnalyze(context: Parameters<PagesFunction<AnalyzeEnv>>[0]): Promise<Response> {
 	const env = context.env;
+	const hostile = crossSiteOrigin(context.request);
+	if (hostile) return json(403, { ok: false, error: '请求来源与本站不一致，已拒绝', detail: `Origin: ${hostile}` });
 	const missing = ['ADMIN_PASSWORD', 'GITHUB_TOKEN', 'OPENAI_API_KEY'].filter((name) => !env[name as keyof AnalyzeEnv]);
 	// 只判「有没有值」不够：把 ANALYZE_LIMITS 加成文本变量也会通过，然后在下一次 .get() 处抛未捕获异常
 	const kv = env.ANALYZE_LIMITS;

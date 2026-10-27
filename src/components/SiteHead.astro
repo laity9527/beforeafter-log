@@ -1,0 +1,35 @@
+---
+// 五个页面共用的一段 <head> 子元素：只做元信息，样式仍由各页面自己管。
+interface Props {
+	title: string;
+	description: string;
+	// noindex 的页面（后台、404）同时不往外挂 canonical/og:url，
+	// 免得爬虫把 /admin 当成一个可规范化的正式地址
+	noindex?: boolean;
+	ogType?: 'website' | 'article';
+}
+
+const { title, description, noindex = false, ogType = 'website' } = Astro.props;
+const pageUrl = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
+const indexable = !noindex;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<meta name="robots" content={indexable ? 'index, follow' : 'noindex'} />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<meta name="theme-color" content="#050505" />
+{indexable && <link rel="canonical" href={pageUrl} />}
+
+<meta property="og:type" content={ogType} />
+<meta property="og:site_name" content="前后志" />
+<meta property="og:locale" content="zh_CN" />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+{indexable && <meta property="og:url" content={pageUrl} />}
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />

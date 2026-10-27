@@ -1,0 +1,84 @@
+---
+import SiteHead from '../components/SiteHead.astro';
+import { commitsUrl } from '../utils/github';
+const sampleVerifyCommand = 'curl -sL https://raw.githubusercontent.com/laity9527/beforeafter-log/main/src/content/logs/why-this-site.md | sha256sum';
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+	<head>
+		<SiteHead
+			title="方法论 | 前后志"
+			description="前后志怎么记：一条日志分成做之前的判断和做之后的实现，各自带时间戳；封存时算下段落指纹，任何人可以用一条命令自己核对。"
+		/>
+		<style>
+			* { box-sizing: border-box; margin: 0; padding: 0; }
+			body {
+				background-color: #050505;
+				color: #e5e5e5;
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+				line-height: 1.7;
+				padding: 0 1.5rem;
+			}
+			.container { max-width: 66ch; margin: 0 auto; padding: 5rem 0; }
+			nav {
+				display: flex; justify-content: space-between; align-items: center;
+				font-size: 0.85rem; margin-bottom: 4rem; font-family: monospace;
+			}
+			nav a { color: #737373; text-decoration: none; transition: color 0.2s; }
+			nav a:hover { color: #fbbf24; }
+			h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.02em; color: #fafafa; margin-bottom: 1rem; }
+			.lede { color: #a3a3a3; font-size: 1.05rem; margin-bottom: 3.5rem; }
+			h2 {
+				font-family: monospace; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
+				color: #fbbf24; margin: 3rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid #262626;
+			}
+			p { color: #a3a3a3; margin-bottom: 1.25rem; }
+			strong { color: #e5e5e5; }
+			ul { margin: 0 0 1.25rem 1.25rem; color: #a3a3a3; }
+			li { margin-bottom: 0.5rem; }
+			code {
+				font-family: monospace; font-size: 0.85em; color: #d4d4d4;
+						background-color: #121212; border: 1px solid #262626; border-radius: 0.25rem; padding: 0.05rem 0.3rem;
+			}
+			.cmd {
+				display: block; margin: 0.5rem 0 1.5rem; padding: 0.7rem 0.85rem;
+				background-color: #0a0a0a; border: 1px solid #262626; border-radius: 0.4rem;
+				font-family: monospace; font-size: 0.72rem; color: #a3a3a3; word-break: break-all;
+			}
+			footer { margin-top: 4rem; font-size: 0.75rem; color: #525252; font-family: monospace; }
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<nav>
+				<a href="/">← 返回判断轨迹</a>
+				<a href="https://github.com/laity9527/beforeafter-log" target="_blank" rel="noopener noreferrer">仓库 ↗</a>
+			</nav>
+
+			<h1>方法论</h1>
+			<p class="lede">这一页只讲这台机器怎么运转：一条判断怎么被记下来、怎么被钉住、以及你作为读者怎么自己核对。</p>
+
+			<h2>一、一条记录长什么样</h2>
+			<p>每条日志都有两段正文和两个时间戳。<strong>BEFORE</strong> 是动手之前写下的判断：当时怎么想、明确不做什么；<strong>AFTER</strong> 是做完之后的回收：实际结果和当初判断的偏差。AFTER 允许暂时空着，空着就是「待验证」，不假装已经验证过。</p>
+
+			<h2>二、判断怎么被钉住</h2>
+			<ul>
+				<li>正文写完后单独跑一次封存，把<strong>段落指纹</strong>与<strong>整文件指纹</strong>（SHA-256）连同当时的 commit 一起追加写进同名账本文件。</li>
+				<li>账本<strong>只追加</strong>，不覆盖：每一次封存都是独立一条，读者比对历史就能看出正文动过没有。</li>
+				<li>构建时强制比对：封存之后再改正文，<strong>构建直接失败</strong>，而不是静默渲染被改过的内容。</li>
+				<li>指纹按 LF 换行计算，所以逐字节等于 GitHub 上那份 raw 文件——你在任何机器上算出来的都该一样。</li>
+			</ul>
+
+			<h2>三、你可以自己核对</h2>
+			<p>每条日志页脚的命令就能复算整份文件，输出应等于页面上公布的整文件指纹：</p>
+			<code class="cmd">{sampleVerifyCommand}</code>
+			<p>段落指纹的口径是：从 <code>## BEFORE</code> 标题行起，到下一个二级标题或文件末尾为止的那段原文，裁掉尾部空白后取 SHA-256。锚定的那次提交也可以在 <a href={commitsUrl('why-this-site')} target="_blank" rel="noopener noreferrer">提交历史</a> 里逐条看。</p>
+
+			<h2>四、AI 在哪里</h2>
+			<p>后台可以读一个 commit 让模型写 <strong>AFTER</strong> 的实现总结。但 <strong>BEFORE 不允许 AI 代写</strong>：这个接口跑在提交之后，反推出来的「预判」是回溯性虚构，一旦进日志再封存，就等于把虚构洗成不可篡改的历史证据。所以服务端会把模型给出的 BEFORE 段整段丢弃、换成一句占位，占位没被本人改写之前，前端不允许发布。</p>
+
+			<footer>Laity Studio © 2026. All judgments are timestamped.</footer>
+		</div>
+	</body>
+</html>
