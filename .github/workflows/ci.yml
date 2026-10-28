@@ -18,7 +18,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: npm
+          # 先不带 npm 缓存：setup-node 的缓存若由另一个 npm 版本写入，
+          # 会在 npm ci 里炸成 ENOTEMPTY/EEXIST 一类的错，而日志只显示「npm ci 失败」。
+          # 这一次运行是为了排除该变量，稳定后可以再把 cache: npm 加回来。
+
+      - name: 构建环境自报（npm ci 红的时候先看这几行）
+        run: |
+          node -v
+          npm -v
+          echo "registry = $(npm config get registry)"
+          echo "engine-strict = $(npm config get engine-strict)"
+          echo "cache = $(npm config get cache)"
+          git log --oneline -1
+          echo "lock 条目数 = $(python3 -c "import json;print(len(json.load(open('package-lock.json'))['packages']))")"
+          npm ci --dry-run
 
       - run: npm ci
 
